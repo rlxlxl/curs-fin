@@ -1,0 +1,22 @@
+# Скомпилированные файлы
+build/
+*.o
+*.a
+*.so
+*.dylib
+
+# Исполняемые файлы
+server
+*.exe
+
+# IDE файлы
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+

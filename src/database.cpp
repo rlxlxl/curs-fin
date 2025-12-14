@@ -13,7 +13,7 @@ Database::Database(const std::string& host, const std::string& port,
                       " user=" + user + 
                       " password=" + password;
     conn = nullptr;
-    loadQueries("queries.sql");
+    loadQueries("sql/queries.sql");
 }
 
 Database::~Database() {

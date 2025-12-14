@@ -6,12 +6,17 @@
 
 ```
 project/
-├── database.h          # Заголовочный файл для работы с БД
-├── database.cpp        # Реализация работы с БД
-├── server.cpp          # Основной файл HTTP-сервера
-├── queries.sql         # SQL запросы (защита от SQL-инъекций)
-├── Makefile           # Файл сборки
-└── README.md          # Эта инструкция
+├── src/
+│   ├── server.cpp      # Основной файл HTTP-сервера
+│   └── database.cpp    # Реализация работы с БД
+├── include/
+│   └── database.h      # Заголовочный файл для работы с БД
+├── sql/
+│   └── queries.sql     # SQL запросы (защита от SQL-инъекций)
+├── build/              # Скомпилированные файлы (создается автоматически)
+├── Makefile            # Файл сборки
+├── .gitignore          # Игнорируемые файлы для Git
+└── README.md           # Эта инструкция
 ```
 
 ## Требования
@@ -113,7 +118,9 @@ make
 
 2. Запустите сервер:
 ```bash
-./server
+make run
+# или
+./build/server
 ```
 
 3. Откройте браузер и перейдите по адресу:
@@ -138,7 +145,7 @@ PGresult* res = PQexecParams(conn, query, 3, nullptr, paramValues, nullptr, null
 
 ## Настройка подключения к БД
 
-Измените параметры в файле `server.cpp` (функция main):
+Измените параметры в файле `src/server.cpp` (функция main):
 ```cpp
 Database db("localhost", "5432", "infosec_db", "ваш_пользователь", "ваш_пароль");
 ```
