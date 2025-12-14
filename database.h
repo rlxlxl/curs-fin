@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <libpq-fe.h>
 
 struct Integrator {
@@ -30,6 +31,9 @@ class Database {
 private:
     PGconn* conn;
     std::string connectionString;
+    std::map<std::string, std::string> queries;
+    
+    bool loadQueries(const std::string& filename);
 
 public:
     Database(const std::string& host, const std::string& port, 
@@ -42,6 +46,9 @@ public:
     
     // Методы для интеграторов
     std::vector<Integrator> getAllIntegrators();
+    std::vector<Integrator> getIntegratorsByCity(const std::string& city);
+    std::vector<Integrator> searchIntegratorsByCity(const std::string& cityPattern);
+    std::vector<std::string> getAllCities();
     bool addIntegrator(const std::string& name, const std::string& city, 
                       const std::string& description);
     bool updateIntegrator(int id, const std::string& name, const std::string& city, 

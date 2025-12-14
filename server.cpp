@@ -38,6 +38,26 @@ std::string urlDecode(const std::string& str) {
     return result;
 }
 
+std::string htmlEscape(const std::string& str) {
+    std::string result;
+    for (char c : str) {
+        if (c == '&') {
+            result += "&amp;";
+        } else if (c == '<') {
+            result += "&lt;";
+        } else if (c == '>') {
+            result += "&gt;";
+        } else if (c == '"') {
+            result += "&quot;";
+        } else if (c == '\'') {
+            result += "&#39;";
+        } else {
+            result += c;
+        }
+    }
+    return result;
+}
+
 std::map<std::string, std::string> parsePostData(const std::string& data) {
     std::map<std::string, std::string> params;
     std::istringstream stream(data);
@@ -66,6 +86,27 @@ std::string getCookie(const std::string& headers, const std::string& name) {
     if (end == std::string::npos) end = headers.length();
     
     return headers.substr(start, end - start);
+}
+
+std::string getQueryParam(const std::string& request, const std::string& paramName) {
+    size_t queryStart = request.find("?");
+    if (queryStart == std::string::npos) return "";
+    
+    size_t queryEnd = request.find(" ", queryStart);
+    if (queryEnd == std::string::npos) queryEnd = request.find("\r\n", queryStart);
+    if (queryEnd == std::string::npos) return "";
+    
+    std::string queryString = request.substr(queryStart + 1, queryEnd - queryStart - 1);
+    
+    size_t paramPos = queryString.find(paramName + "=");
+    if (paramPos == std::string::npos) return "";
+    
+    size_t valueStart = paramPos + paramName.length() + 1;
+    size_t valueEnd = queryString.find("&", valueStart);
+    if (valueEnd == std::string::npos) valueEnd = queryString.length();
+    
+    std::string value = queryString.substr(valueStart, valueEnd - valueStart);
+    return urlDecode(value);
 }
 
 std::string generateLoginPage(const std::string& error = "") {
@@ -103,7 +144,7 @@ std::string generateLoginPage(const std::string& error = "") {
     return html.str();
 }
 
-std::string generateMainPage(const std::vector<Integrator>& integrators, bool isAdmin, const std::string& username, const std::string& tabToken) {
+std::string generateMainPage(const std::vector<Integrator>& integrators, bool isAdmin, const std::string& username, const std::string& tabToken, const std::vector<std::string>& cities, const std::string& selectedCity = "") {
     std::ostringstream html;
     html << "<!DOCTYPE html><html lang='ru'><head>"
          << "<meta charset='UTF-8'><title>Интеграторы InfoSec</title><style>"
@@ -134,6 +175,16 @@ std::string generateMainPage(const std::vector<Integrator>& integrators, bool is
          << ".modal-buttons button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }"
          << ".save-btn { background: #27ae60; color: white; } .save-btn:hover { background: #229954; }"
          << ".cancel-btn { background: #95a5a6; color: white; } .cancel-btn:hover { background: #7f8c8d; }"
+         << ".search-box { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }"
+         << ".search-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }"
+         << ".search-form input, .search-form select { padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }"
+         << ".search-form input[type='text'] { flex: 1; min-width: 200px; }"
+         << ".search-form select { min-width: 150px; }"
+         << ".search-btn { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; }"
+         << ".search-btn:hover { background: #2980b9; }"
+         << ".clear-btn { background: #95a5a6; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; }"
+         << ".clear-btn:hover { background: #7f8c8d; }"
+         << ".results-info { color: #7f8c8d; font-size: 14px; margin-bottom: 15px; }"
          << "</style>"
          << "<script>"
          << "window.onload = function() {"
@@ -157,6 +208,34 @@ std::string generateMainPage(const std::vector<Integrator>& integrators, bool is
     
     html << "</div><form method='POST' action='/logout' style='display:inline;'>"
          << "<button type='submit' class='logout-btn'>Выйти</button></form></div></div>";
+    
+    // Форма поиска и фильтрации
+    std::string escapedCity = htmlEscape(selectedCity);
+    html << "<div class='search-box'>"
+         << "<form method='GET' action='/' class='search-form'>"
+         << "<input type='text' name='city' placeholder='Поиск по городу...' value='" << escapedCity << "'>"
+         << "<select name='filter_city'>"
+         << "<option value=''>Все города</option>";
+    
+    for (const auto& city : cities) {
+        std::string escapedCityName = htmlEscape(city);
+        html << "<option value='" << escapedCityName << "'";
+        if (city == selectedCity) {
+            html << " selected";
+        }
+        html << ">" << escapedCityName << "</option>";
+    }
+    
+    html << "</select>"
+         << "<button type='submit' class='search-btn'>🔍 Поиск</button>"
+         << "<a href='/' style='text-decoration: none;'><button type='button' class='clear-btn'>Очистить</button></a>"
+         << "</form>";
+    
+    if (!selectedCity.empty()) {
+        html << "<div class='results-info'>Найдено интеграторов: " << integrators.size() << "</div>";
+    }
+    
+    html << "</div>";
     
     if (isAdmin) {
         html << "<button class='add-btn' onclick='openAddModal()'>➕ Добавить интегратора</button>";
@@ -435,8 +514,30 @@ int main() {
             if (session) {
                 std::string tabToken = getCookie(request, "tab_token");
                 std::cout << "Пользователь: " << session->username << ", Admin: " << (session->isAdmin ? "Да" : "Нет") << ", Tab token: " << tabToken << std::endl;
-                std::vector<Integrator> integrators = db.getAllIntegrators();
-                response = createHTTPResponse(generateMainPage(integrators, session->isAdmin, session->username, tabToken));
+                
+                // Получаем параметры фильтрации
+                std::string cityParam = getQueryParam(request, "city");
+                std::string filterCity = getQueryParam(request, "filter_city");
+                
+                std::string selectedCity;
+                std::vector<Integrator> integrators;
+                
+                // Определяем, какой фильтр использовать
+                if (!filterCity.empty()) {
+                    // Точное совпадение по городу из выпадающего списка
+                    selectedCity = filterCity;
+                    integrators = db.getIntegratorsByCity(filterCity);
+                } else if (!cityParam.empty()) {
+                    // Поиск по частичному совпадению
+                    selectedCity = cityParam;
+                    integrators = db.searchIntegratorsByCity(cityParam);
+                } else {
+                    // Показать все
+                    integrators = db.getAllIntegrators();
+                }
+                
+                std::vector<std::string> cities = db.getAllCities();
+                response = createHTTPResponse(generateMainPage(integrators, session->isAdmin, session->username, tabToken, cities, selectedCity));
             } else {
                 response = createHTTPResponse(generateLoginPage());
             }

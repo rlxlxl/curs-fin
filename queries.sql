@@ -31,9 +31,21 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- QUERY: GET_ALL_INTEGRATORS
 SELECT id, name, city, description FROM integrators ORDER BY name;
 
+-- Получение интеграторов по городу
+-- QUERY: GET_INTEGRATORS_BY_CITY
+SELECT id, name, city, description FROM integrators WHERE city = $1 ORDER BY name;
+
+-- Поиск интеграторов по городу (частичное совпадение)
+-- QUERY: SEARCH_INTEGRATORS_BY_CITY
+SELECT id, name, city, description FROM integrators WHERE city ILIKE $1 ORDER BY name;
+
+-- Получение списка всех уникальных городов
+-- QUERY: GET_ALL_CITIES
+SELECT DISTINCT city FROM integrators ORDER BY city;
+
 -- Добавление интегратора (используется с параметрами)
 -- QUERY: ADD_INTEGRATOR
-INSERT INTO integrators (name, city, description) VALUES ($1, $2, $3) RETURNING id;
+INSERT INTO integrators (name, city, description) VALUES ($1, $2, $3);
 
 -- Обновление интегратора
 -- QUERY: UPDATE_INTEGRATOR
@@ -49,11 +61,11 @@ SELECT id, username, password_hash, is_admin FROM users WHERE username = $1;
 
 -- Создание пользователя
 -- QUERY: CREATE_USER
-INSERT INTO users (username, password_hash, is_admin) VALUES ($1, $2, $3) RETURNING id;
+INSERT INTO users (username, password_hash, is_admin) VALUES ($1, $2, $3);
 
 -- Создание сессии
 -- QUERY: CREATE_SESSION
-INSERT INTO sessions (session_id, user_id, expires_at) VALUES ($1, $2, $3) RETURNING id;
+INSERT INTO sessions (session_id, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours');
 
 -- Получение сессии
 -- QUERY: GET_SESSION
@@ -65,6 +77,10 @@ WHERE s.session_id = $1 AND s.expires_at > NOW();
 -- Удаление сессии
 -- QUERY: DELETE_SESSION
 DELETE FROM sessions WHERE session_id = $1;
+
+-- Удаление всех сессий пользователя
+-- QUERY: DELETE_USER_SESSIONS
+DELETE FROM sessions WHERE user_id = $1;
 
 -- Создание администратора по умолчанию (пароль: admin123)
 INSERT INTO users (username, password_hash, is_admin) 
