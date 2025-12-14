@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15-alpine
+    container_name: infosec_postgres
+    environment:
+      POSTGRES_DB: infosec_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - infosec_network
+
+  # Веб-сервер приложения
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: infosec_web
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: infosec_db
+      DB_USER: postgres
+      DB_PASSWORD: password
+    ports:
+      - "8080:8080"
+    networks:
+      - infosec_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  infosec_network:
+    driver: bridge
+

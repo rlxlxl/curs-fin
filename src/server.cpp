@@ -2,6 +2,7 @@
 #include <iostream>
 #include <sstream>
 #include <cstring>
+#include <cstdlib>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -337,8 +338,20 @@ std::string createRedirectResponse(const std::string& location) {
     return response.str();
 }
 
+std::string getEnv(const std::string& key, const std::string& defaultValue) {
+    const char* val = std::getenv(key.c_str());
+    return val ? std::string(val) : defaultValue;
+}
+
 int main() {
-    Database db("localhost", "5432", "infosec_db", "postgres", "password");
+    // Получение параметров подключения из переменных окружения или использование значений по умолчанию
+    std::string dbHost = getEnv("DB_HOST", "localhost");
+    std::string dbPort = getEnv("DB_PORT", "5432");
+    std::string dbName = getEnv("DB_NAME", "infosec_db");
+    std::string dbUser = getEnv("DB_USER", "postgres");
+    std::string dbPassword = getEnv("DB_PASSWORD", "password");
+    
+    Database db(dbHost, dbPort, dbName, dbUser, dbPassword);
     
     if (!db.connect()) {
         return 1;
