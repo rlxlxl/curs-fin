@@ -172,7 +172,7 @@ std::string generateLoginPage(const std::string& error = "") {
          << "<input type='password' name='password' placeholder='Пароль' required>"
          << "<button type='submit'>Войти</button></form>"
          << "<a href='/register' class='register-link'>Нет аккаунта? Зарегистрироваться</a>"
-         << "<div class='info'><br>Для админа: <b>admin</b> / <b>admin123</b></div>"
+         << "<div class='info'><br>Для админа: <b>парол</b> / <b>не кажу123</b></div>"
          << "</div></body></html>";
     
     return html.str();
@@ -240,6 +240,9 @@ std::string generateMainPage(
     const std::string& username,
     const std::string& tabToken,
     const std::vector<std::string>& cities,
+    const std::vector<std::pair<int, std::string>>& countries = {},
+    const std::vector<std::pair<int, std::string>>& products = {},
+    const std::vector<std::pair<int, std::string>>& services = {},
     const std::string& cityQuery = "",
     const std::string& filterCityParam = "",
     const std::string& searchName = "",
@@ -263,7 +266,14 @@ std::string generateMainPage(
          << ".integrator { background: white; padding: 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: relative; }"
          << ".integrator h2 { color: #3498db; margin: 0 0 10px 0; }"
          << ".city { color: #7f8c8d; font-size: 14px; margin-bottom: 10px; }"
-         << ".description { color: #34495e; line-height: 1.6; }"
+         << ".website, .licenses, .certificates, .products, .services { color: #7f8c8d; font-size: 14px; margin-bottom: 12px; }"
+         << ".website a { color: #3498db; text-decoration: none; font-weight: 500; }"
+         << ".website a:hover { text-decoration: underline; color: #2980b9; }"
+         << ".license-list, .certificate-list { margin: 8px 0 0 20px; padding: 0; list-style: none; }"
+         << ".license-list li, .certificate-list li { margin: 6px 0; padding: 8px; background: #f8f9fa; border-left: 3px solid #3498db; border-radius: 3px; }"
+         << ".license-list li strong, .certificate-list li strong { color: #2c3e50; }"
+         << ".license-list li em, .certificate-list li em { color: #7f8c8d; font-style: normal; }"
+         << ".description { color: #34495e; line-height: 1.6; margin-top: 10px; }"
          << ".badge { display: inline-block; padding: 3px 8px; background: #3498db; color: white; border-radius: 3px; font-size: 12px; margin-right: 10px; }"
          << ".add-btn { background: #27ae60; color: white; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; font-size: 16px; margin-bottom: 20px; }"
          << ".add-btn:hover { background: #229954; }"
@@ -274,8 +284,16 @@ std::string generateMainPage(
          << ".modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }"
          << ".modal-content { background: white; margin: 5% auto; padding: 30px; border-radius: 10px; width: 500px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }"
          << ".modal-content h2 { margin-top: 0; color: #2c3e50; }"
-         << ".modal-content input, .modal-content textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }"
+         << ".modal-content input, .modal-content textarea, .modal-content select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }"
          << ".modal-content textarea { height: 100px; resize: vertical; }"
+         << ".modal-content select[multiple] { height: 120px; }"
+         << ".license-item, .certificate-item { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }"
+         << ".license-item input, .certificate-item input { flex: 1; }"
+         << ".add-item-btn { background: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; }"
+         << ".add-item-btn:hover { background: #2980b9; }"
+         << ".remove-item-btn { background: #e74c3c; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; }"
+         << ".remove-item-btn:hover { background: #c0392b; }"
+         << ".items-container { margin: 10px 0; }"
          << ".modal-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }"
          << ".modal-buttons button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }"
          << ".save-btn { background: #27ae60; color: white; } .save-btn:hover { background: #229954; }"
@@ -373,34 +391,111 @@ std::string generateMainPage(
         html << "<div class='integrator'>";
         
         if (isAdmin) {
+            // Подготовка данных для модального окна
             std::string escapedName = integrator.name;
             std::string escapedCity = integrator.city;
             std::string escapedDesc = integrator.description;
+            std::string escapedWebsite = integrator.website;
             
-            size_t pos = 0;
-            while ((pos = escapedName.find("\"", pos)) != std::string::npos) {
-                escapedName.replace(pos, 1, "&quot;");
-                pos += 6;
+            // Экранирование кавычек и переносов строк
+            auto escapeForJS = [](std::string& str) {
+                size_t pos = 0;
+                while ((pos = str.find("\\", pos)) != std::string::npos) {
+                    str.replace(pos, 1, "\\\\");
+                    pos += 2;
+                }
+                pos = 0;
+                while ((pos = str.find("\"", pos)) != std::string::npos) {
+                    str.replace(pos, 1, "\\\"");
+                    pos += 2;
+                }
+                pos = 0;
+                while ((pos = str.find("\n", pos)) != std::string::npos) {
+                    str.replace(pos, 1, "\\n");
+                    pos += 2;
+                }
+                pos = 0;
+                while ((pos = str.find("\r", pos)) != std::string::npos) {
+                    str.replace(pos, 1, "");
+                }
+            };
+            
+            escapeForJS(escapedName);
+            escapeForJS(escapedCity);
+            escapeForJS(escapedDesc);
+            escapeForJS(escapedWebsite);
+            
+            // Получаем ID страны
+            int countryId = 0;
+            for (const auto& country : countries) {
+                if (country.second == integrator.country) {
+                    countryId = country.first;
+                    break;
+                }
             }
-            pos = 0;
-            while ((pos = escapedCity.find("\"", pos)) != std::string::npos) {
-                escapedCity.replace(pos, 1, "&quot;");
-                pos += 6;
+            
+            // Получаем ID продуктов и услуг
+            std::vector<int> productIds;
+            std::vector<int> serviceIds;
+            if (!integrator.products.empty()) {
+                for (const auto& product : products) {
+                    if (integrator.products.find(product.second) != std::string::npos) {
+                        productIds.push_back(product.first);
+                    }
+                }
             }
-            pos = 0;
-            while ((pos = escapedDesc.find("\"", pos)) != std::string::npos) {
-                escapedDesc.replace(pos, 1, "&quot;");
-                pos += 6;
+            if (!integrator.services.empty()) {
+                for (const auto& service : services) {
+                    if (integrator.services.find(service.second) != std::string::npos) {
+                        serviceIds.push_back(service.first);
+                    }
+                }
             }
-            pos = 0;
-            while ((pos = escapedDesc.find("\n", pos)) != std::string::npos) {
-                escapedDesc.replace(pos, 1, " ");
-                pos += 1;
+            
+            std::string productIdsStr;
+            for (size_t i = 0; i < productIds.size(); i++) {
+                if (i > 0) productIdsStr += ",";
+                productIdsStr += std::to_string(productIds[i]);
             }
+            
+            std::string serviceIdsStr;
+            for (size_t i = 0; i < serviceIds.size(); i++) {
+                if (i > 0) serviceIdsStr += ",";
+                serviceIdsStr += std::to_string(serviceIds[i]);
+            }
+            
+            // Подготовка JSON для лицензий и сертификатов
+            std::ostringstream licensesJson;
+            licensesJson << "[";
+            for (size_t i = 0; i < integrator.licenses.size(); i++) {
+                if (i > 0) licensesJson << ",";
+                std::string num = integrator.licenses[i].number;
+                std::string issued = integrator.licenses[i].issuedBy;
+                escapeForJS(num);
+                escapeForJS(issued);
+                licensesJson << "{\"number\":\"" << num << "\",\"issuedBy\":\"" << issued << "\"}";
+            }
+            licensesJson << "]";
+            
+            std::ostringstream certificatesJson;
+            certificatesJson << "[";
+            for (size_t i = 0; i < integrator.certificates.size(); i++) {
+                if (i > 0) certificatesJson << ",";
+                std::string name = integrator.certificates[i].name;
+                std::string number = integrator.certificates[i].number;
+                std::string issued = integrator.certificates[i].issuedBy;
+                escapeForJS(name);
+                escapeForJS(number);
+                escapeForJS(issued);
+                certificatesJson << "{\"name\":\"" << name << "\",\"number\":\"" << number << "\",\"issuedBy\":\"" << issued << "\"}";
+            }
+            certificatesJson << "]";
             
             html << "<div class='action-buttons'>"
                  << "<button class='edit-btn' onclick=\"openEditModal(" << integrator.id << ", '"
-                 << escapedName << "', '" << escapedCity << "', '" << escapedDesc << "')\">✏️ Изменить</button>"
+                 << escapedName << "', '" << escapedCity << "', '" << escapedDesc << "', '"
+                 << escapedWebsite << "', " << countryId << ", '" << productIdsStr << "', '"
+                 << serviceIdsStr << "', '" << licensesJson.str() << "', '" << certificatesJson.str() << "')\">✏️ Изменить</button>"
                  << "<form method='POST' action='/delete' style='display:inline;'>"
                  << "<input type='hidden' name='id' value='" << integrator.id << "'>"
                  << "<button type='submit' class='delete-btn' onclick='return confirm(\"Удалить этого интегратора?\")'>🗑️ Удалить</button>"
@@ -408,8 +503,43 @@ std::string generateMainPage(
         }
         
         html << "<h2>" << integrator.name << "</h2>"
-             << "<div class='city'><span class='badge'>Город</span>" << integrator.city << "</div>"
-             << "<div class='description'>" << integrator.description << "</div>"
+             << "<div class='city'><span class='badge'>Город</span>" << integrator.city;
+        if (!integrator.country.empty()) {
+            html << " <span class='badge'>Страна</span>" << integrator.country;
+        }
+        html << "</div>";
+        if (!integrator.website.empty()) {
+            std::string websiteUrl = integrator.website;
+            if (websiteUrl.find("http://") != 0 && websiteUrl.find("https://") != 0) {
+                websiteUrl = "https://" + websiteUrl;
+            }
+            html << "<div class='website'><span class='badge'>🌐 Сайт</span><a href='" << htmlEscape(websiteUrl) << "' target='_blank' rel='noopener noreferrer'>" << htmlEscape(integrator.website) << " ↗</a></div>";
+        }
+        if (!integrator.licenses.empty()) {
+            html << "<div class='licenses'><span class='badge'>📜 Лицензии</span><ul class='license-list'>";
+            for (const auto& license : integrator.licenses) {
+                html << "<li><strong>" << htmlEscape(license.number) << "</strong> — выдана: <em>" << htmlEscape(license.issuedBy) << "</em></li>";
+            }
+            html << "</ul></div>";
+        }
+        if (!integrator.certificates.empty()) {
+            html << "<div class='certificates'><span class='badge'>🏆 Сертификаты</span><ul class='certificate-list'>";
+            for (const auto& cert : integrator.certificates) {
+                html << "<li><strong>" << htmlEscape(cert.name) << "</strong>";
+                if (!cert.number.empty()) {
+                    html << " (№ " << htmlEscape(cert.number) << ")";
+                }
+                html << " — выдано: <em>" << htmlEscape(cert.issuedBy) << "</em></li>";
+            }
+            html << "</ul></div>";
+        }
+        if (!integrator.products.empty()) {
+            html << "<div class='products'><span class='badge'>Продукты</span>" << htmlEscape(integrator.products) << "</div>";
+        }
+        if (!integrator.services.empty()) {
+            html << "<div class='services'><span class='badge'>Услуги</span>" << htmlEscape(integrator.services) << "</div>";
+        }
+        html << "<div class='description'>" << integrator.description << "</div>"
              << "<div class='rating'>";
 
         auto statIt = ratingStats.find(integrator.id);
@@ -486,26 +616,139 @@ std::string generateMainPage(
     }
     
     if (isAdmin) {
-        html << "<div id='modal' class='modal'><div class='modal-content'>"
+        html << "<div id='modal' class='modal'><div class='modal-content' style='max-width: 700px; max-height: 90vh; overflow-y: auto;'>"
              << "<h2 id='modal-title'>Добавить интегратора</h2>"
              << "<form id='modal-form' method='POST' action='/add'>"
              << "<input type='hidden' name='id' id='edit-id'>"
              << "<input type='text' name='name' id='name' placeholder='Название' required>"
              << "<input type='text' name='city' id='city' placeholder='Город' required>"
              << "<textarea name='description' id='description' placeholder='Описание' required></textarea>"
+             << "<input type='text' name='website' id='website' placeholder='Сайт (например: https://example.com)'>"
+             << "<select name='country_id' id='country_id'>"
+             << "<option value=''>Выберите страну</option>";
+        
+        for (const auto& country : countries) {
+            html << "<option value='" << country.first << "'>" << htmlEscape(country.second) << "</option>";
+        }
+        
+        html << "</select>"
+             << "<label>Продукты (удерживайте Ctrl/Cmd для множественного выбора):</label>"
+             << "<select name='products[]' id='products' multiple>";
+        
+        for (const auto& product : products) {
+            html << "<option value='" << product.first << "'>" << htmlEscape(product.second) << "</option>";
+        }
+        
+        html << "</select>"
+             << "<label>Услуги (удерживайте Ctrl/Cmd для множественного выбора):</label>"
+             << "<select name='services[]' id='services' multiple>";
+        
+        for (const auto& service : services) {
+            html << "<option value='" << service.first << "'>" << htmlEscape(service.second) << "</option>";
+        }
+        
+        html << "</select>"
+             << "<label>Лицензии:</label>"
+             << "<div id='licenses-container' class='items-container'></div>"
+             << "<button type='button' class='add-item-btn' onclick='addLicenseField()'>+ Добавить лицензию</button>"
+             << "<label>Сертификаты:</label>"
+             << "<div id='certificates-container' class='items-container'></div>"
+             << "<button type='button' class='add-item-btn' onclick='addCertificateField()'>+ Добавить сертификат</button>"
              << "<div class='modal-buttons'>"
              << "<button type='button' class='cancel-btn' onclick='closeModal()'>Отмена</button>"
              << "<button type='submit' class='save-btn'>Сохранить</button>"
              << "</div></form></div></div>"
              << "<script>"
-             << "function openAddModal() { document.getElementById('modal-title').innerText = 'Добавить интегратора'; "
-             << "document.getElementById('modal-form').action = '/add'; document.getElementById('edit-id').value = ''; "
-             << "document.getElementById('name').value = ''; document.getElementById('city').value = ''; "
-             << "document.getElementById('description').value = ''; document.getElementById('modal').style.display = 'block'; }"
-             << "function openEditModal(id, name, city, desc) { document.getElementById('modal-title').innerText = 'Изменить интегратора'; "
-             << "document.getElementById('modal-form').action = '/update'; document.getElementById('edit-id').value = id; "
-             << "document.getElementById('name').value = name; document.getElementById('city').value = city; "
-             << "document.getElementById('description').value = desc; document.getElementById('modal').style.display = 'block'; }"
+             << "let licenseCount = 0;"
+             << "let certificateCount = 0;"
+             << "function addLicenseField() {"
+             << "  const container = document.getElementById('licenses-container');"
+             << "  const div = document.createElement('div');"
+             << "  div.className = 'license-item';"
+             << "  div.innerHTML = '<input type=\"text\" name=\"license_number[]\" placeholder=\"Номер лицензии\" required>"
+             << "    <input type=\"text\" name=\"license_issued_by[]\" placeholder=\"Кем выдана\" required>"
+             << "    <button type=\"button\" class=\"remove-item-btn\" onclick=\"this.parentElement.remove()\">Удалить</button>';"
+             << "  container.appendChild(div);"
+             << "  licenseCount++;"
+             << "}"
+             << "function addCertificateField() {"
+             << "  const container = document.getElementById('certificates-container');"
+             << "  const div = document.createElement('div');"
+             << "  div.className = 'certificate-item';"
+             << "  div.innerHTML = '<input type=\"text\" name=\"certificate_name[]\" placeholder=\"Название сертификата\" required>"
+             << "    <input type=\"text\" name=\"certificate_number[]\" placeholder=\"Номер (необязательно)\">"
+             << "    <input type=\"text\" name=\"certificate_issued_by[]\" placeholder=\"Кем выдан\" required>"
+             << "    <button type=\"button\" class=\"remove-item-btn\" onclick=\"this.parentElement.remove()\">Удалить</button>';"
+             << "  container.appendChild(div);"
+             << "  certificateCount++;"
+             << "}"
+             << "function openAddModal() {"
+             << "  document.getElementById('modal-title').innerText = 'Добавить интегратора';"
+             << "  document.getElementById('modal-form').action = '/add';"
+             << "  document.getElementById('edit-id').value = '';"
+             << "  document.getElementById('name').value = '';"
+             << "  document.getElementById('city').value = '';"
+             << "  document.getElementById('description').value = '';"
+             << "  document.getElementById('website').value = '';"
+             << "  document.getElementById('country_id').value = '';"
+             << "  Array.from(document.getElementById('products').options).forEach(opt => opt.selected = false);"
+             << "  Array.from(document.getElementById('services').options).forEach(opt => opt.selected = false);"
+             << "  document.getElementById('licenses-container').innerHTML = '';"
+             << "  document.getElementById('certificates-container').innerHTML = '';"
+             << "  licenseCount = 0;"
+             << "  certificateCount = 0;"
+             << "  document.getElementById('modal').style.display = 'block';"
+             << "}"
+             << "function openEditModal(id, name, city, desc, website, countryId, productIds, serviceIds, licenses, certificates) {"
+             << "  document.getElementById('modal-title').innerText = 'Изменить интегратора';"
+             << "  document.getElementById('modal-form').action = '/update';"
+             << "  document.getElementById('edit-id').value = id;"
+             << "  document.getElementById('name').value = name || '';"
+             << "  document.getElementById('city').value = city || '';"
+             << "  document.getElementById('description').value = desc || '';"
+             << "  document.getElementById('website').value = website || '';"
+             << "  document.getElementById('country_id').value = countryId || '';"
+             << "  if (productIds) {"
+             << "    const ids = productIds.split(',');"
+             << "    Array.from(document.getElementById('products').options).forEach(opt => {"
+             << "      opt.selected = ids.includes(opt.value);"
+             << "    });"
+             << "  }"
+             << "  if (serviceIds) {"
+             << "    const ids = serviceIds.split(',');"
+             << "    Array.from(document.getElementById('services').options).forEach(opt => {"
+             << "      opt.selected = ids.includes(opt.value);"
+             << "    });"
+             << "  }"
+             << "  const licensesContainer = document.getElementById('licenses-container');"
+             << "  licensesContainer.innerHTML = '';"
+             << "  if (licenses) {"
+             << "    const licenseList = JSON.parse(licenses);"
+             << "    licenseList.forEach(function(lic) {"
+             << "      const div = document.createElement('div');"
+             << "      div.className = 'license-item';"
+             << "      div.innerHTML = '<input type=\"text\" name=\"license_number[]\" value=\"' + (lic.number || '') + '\" placeholder=\"Номер лицензии\" required>"
+             << "        <input type=\"text\" name=\"license_issued_by[]\" value=\"' + (lic.issuedBy || '') + '\" placeholder=\"Кем выдана\" required>"
+             << "        <button type=\"button\" class=\"remove-item-btn\" onclick=\"this.parentElement.remove()\">Удалить</button>';"
+             << "      licensesContainer.appendChild(div);"
+             << "    });"
+             << "  }"
+             << "  const certificatesContainer = document.getElementById('certificates-container');"
+             << "  certificatesContainer.innerHTML = '';"
+             << "  if (certificates) {"
+             << "    const certList = JSON.parse(certificates);"
+             << "    certList.forEach(function(cert) {"
+             << "      const div = document.createElement('div');"
+             << "      div.className = 'certificate-item';"
+             << "      div.innerHTML = '<input type=\"text\" name=\"certificate_name[]\" value=\"' + (cert.name || '') + '\" placeholder=\"Название сертификата\" required>"
+             << "        <input type=\"text\" name=\"certificate_number[]\" value=\"' + (cert.number || '') + '\" placeholder=\"Номер (необязательно)\">"
+             << "        <input type=\"text\" name=\"certificate_issued_by[]\" value=\"' + (cert.issuedBy || '') + '\" placeholder=\"Кем выдан\" required>"
+             << "        <button type=\"button\" class=\"remove-item-btn\" onclick=\"this.parentElement.remove()\">Удалить</button>';"
+             << "      certificatesContainer.appendChild(div);"
+             << "    });"
+             << "  }"
+             << "  document.getElementById('modal').style.display = 'block';"
+             << "}"
              << "function closeModal() { document.getElementById('modal').style.display = 'none'; }"
              << "window.onclick = function(event) { if (event.target == document.getElementById('modal')) { closeModal(); } }"
              << "</script>";
@@ -766,7 +1009,95 @@ int main() {
             if (bodyStart != std::string::npos) {
                 std::string body = request.substr(bodyStart + 4);
                 auto params = parsePostData(body);
-                db.addIntegrator(params["name"], params["city"], params["description"]);
+                
+                std::string website = params["website"];
+                int countryId = 0;
+                if (!params["country_id"].empty()) {
+                    try { countryId = std::stoi(params["country_id"]); } catch (...) {}
+                }
+                
+                // Добавляем интегратора и получаем ID
+                int newId = db.addIntegratorAndGetId(params["name"], params["city"], params["description"], website, countryId);
+                
+                if (newId > 0) {
+                    // Добавляем лицензии
+                    size_t pos = 0;
+                    while ((pos = body.find("license_number[]=", pos)) != std::string::npos) {
+                        pos += 17;
+                        size_t end = body.find("&", pos);
+                        if (end == std::string::npos) end = body.length();
+                        std::string num = urlDecode(body.substr(pos, end - pos));
+                        pos = body.find("license_issued_by[]=", end);
+                        if (pos != std::string::npos) {
+                            pos += 20;
+                            end = body.find("&", pos);
+                            if (end == std::string::npos) end = body.length();
+                            std::string issued = urlDecode(body.substr(pos, end - pos));
+                            if (!num.empty() && !issued.empty()) {
+                                db.addLicense(newId, num, issued);
+                            }
+                        }
+                    }
+                    
+                    // Добавляем сертификаты
+                    pos = 0;
+                    while ((pos = body.find("certificate_name[]=", pos)) != std::string::npos) {
+                        pos += 19;
+                        size_t end = body.find("&", pos);
+                        if (end == std::string::npos) end = body.length();
+                        std::string name = urlDecode(body.substr(pos, end - pos));
+                        
+                        pos = body.find("certificate_number[]=", end);
+                        std::string number = "";
+                        if (pos != std::string::npos) {
+                            pos += 21;
+                            end = body.find("&", pos);
+                            if (end == std::string::npos) end = body.length();
+                            number = urlDecode(body.substr(pos, end - pos));
+                        }
+                        
+                        pos = body.find("certificate_issued_by[]=", end);
+                        if (pos != std::string::npos) {
+                            pos += 24;
+                            end = body.find("&", pos);
+                            if (end == std::string::npos) end = body.length();
+                            std::string issued = urlDecode(body.substr(pos, end - pos));
+                            if (!name.empty() && !issued.empty()) {
+                                db.addCertificate(newId, name, number, issued);
+                            }
+                        }
+                    }
+                    
+                    // Добавляем продукты
+                    std::vector<int> productIds;
+                    pos = 0;
+                    while ((pos = body.find("products[]=", pos)) != std::string::npos) {
+                        pos += 11;
+                        size_t end = body.find("&", pos);
+                        if (end == std::string::npos) end = body.length();
+                        try {
+                            productIds.push_back(std::stoi(urlDecode(body.substr(pos, end - pos))));
+                        } catch (...) {}
+                    }
+                    if (!productIds.empty()) {
+                        db.setIntegratorProducts(newId, productIds);
+                    }
+                    
+                    // Добавляем услуги
+                    std::vector<int> serviceIds;
+                    pos = 0;
+                    while ((pos = body.find("services[]=", pos)) != std::string::npos) {
+                        pos += 11;
+                        size_t end = body.find("&", pos);
+                        if (end == std::string::npos) end = body.length();
+                        try {
+                            serviceIds.push_back(std::stoi(urlDecode(body.substr(pos, end - pos))));
+                        } catch (...) {}
+                    }
+                    if (!serviceIds.empty()) {
+                        db.setIntegratorServices(newId, serviceIds);
+                    }
+                }
             }
             response = createRedirectResponse("/");
         } else if (request.find("POST /update") == 0 && session && session->isAdmin) {
@@ -774,7 +1105,92 @@ int main() {
             if (bodyStart != std::string::npos) {
                 std::string body = request.substr(bodyStart + 4);
                 auto params = parsePostData(body);
-                db.updateIntegrator(std::stoi(params["id"]), params["name"], params["city"], params["description"]);
+                
+                int id = std::stoi(params["id"]);
+                std::string website = params["website"];
+                int countryId = 0;
+                if (!params["country_id"].empty()) {
+                    try { countryId = std::stoi(params["country_id"]); } catch (...) {}
+                }
+                
+                // Обновляем интегратора
+                db.updateIntegrator(id, params["name"], params["city"], params["description"], website, countryId);
+                
+                // Обновляем лицензии
+                db.deleteLicenses(id);
+                size_t pos = 0;
+                while ((pos = body.find("license_number[]=", pos)) != std::string::npos) {
+                    pos += 17;
+                    size_t end = body.find("&", pos);
+                    if (end == std::string::npos) end = body.length();
+                    std::string num = urlDecode(body.substr(pos, end - pos));
+                    pos = body.find("license_issued_by[]=", end);
+                    if (pos != std::string::npos) {
+                        pos += 20;
+                        end = body.find("&", pos);
+                        if (end == std::string::npos) end = body.length();
+                        std::string issued = urlDecode(body.substr(pos, end - pos));
+                        if (!num.empty() && !issued.empty()) {
+                            db.addLicense(id, num, issued);
+                        }
+                    }
+                }
+                
+                // Обновляем сертификаты
+                db.deleteCertificates(id);
+                pos = 0;
+                while ((pos = body.find("certificate_name[]=", pos)) != std::string::npos) {
+                    pos += 19;
+                    size_t end = body.find("&", pos);
+                    if (end == std::string::npos) end = body.length();
+                    std::string name = urlDecode(body.substr(pos, end - pos));
+                    
+                    pos = body.find("certificate_number[]=", end);
+                    std::string number = "";
+                    if (pos != std::string::npos) {
+                        pos += 21;
+                        end = body.find("&", pos);
+                        if (end == std::string::npos) end = body.length();
+                        number = urlDecode(body.substr(pos, end - pos));
+                    }
+                    
+                    pos = body.find("certificate_issued_by[]=", end);
+                    if (pos != std::string::npos) {
+                        pos += 24;
+                        end = body.find("&", pos);
+                        if (end == std::string::npos) end = body.length();
+                        std::string issued = urlDecode(body.substr(pos, end - pos));
+                        if (!name.empty() && !issued.empty()) {
+                            db.addCertificate(id, name, number, issued);
+                        }
+                    }
+                }
+                
+                // Обновляем продукты
+                std::vector<int> productIds;
+                pos = 0;
+                while ((pos = body.find("products[]=", pos)) != std::string::npos) {
+                    pos += 11;
+                    size_t end = body.find("&", pos);
+                    if (end == std::string::npos) end = body.length();
+                    try {
+                        productIds.push_back(std::stoi(urlDecode(body.substr(pos, end - pos))));
+                    } catch (...) {}
+                }
+                db.setIntegratorProducts(id, productIds);
+                
+                // Обновляем услуги
+                std::vector<int> serviceIds;
+                pos = 0;
+                while ((pos = body.find("services[]=", pos)) != std::string::npos) {
+                    pos += 11;
+                    size_t end = body.find("&", pos);
+                    if (end == std::string::npos) end = body.length();
+                    try {
+                        serviceIds.push_back(std::stoi(urlDecode(body.substr(pos, end - pos))));
+                    } catch (...) {}
+                }
+                db.setIntegratorServices(id, serviceIds);
             }
             response = createRedirectResponse("/");
         } else if (request.find("POST /delete") == 0 && session && session->isAdmin) {
@@ -873,7 +1289,10 @@ int main() {
                 }
 
                 std::vector<std::string> cities = db.getAllCities();
-                response = createHTTPResponse(generateMainPage(pageItems, session->isAdmin, true, session->username, tabToken, cities, cityParam, filterCity, searchName, sortOption, page, totalPages, total, ratingStats, integratorRatings));
+                std::vector<std::pair<int, std::string>> countries = db.getAllCountries();
+                std::vector<std::pair<int, std::string>> products = db.getAllProducts();
+                std::vector<std::pair<int, std::string>> services = db.getAllServices();
+                response = createHTTPResponse(generateMainPage(pageItems, session->isAdmin, true, session->username, tabToken, cities, countries, products, services, cityParam, filterCity, searchName, sortOption, page, totalPages, total, ratingStats, integratorRatings));
             } else {
                 response = createHTTPResponse(generateLoginPage());
             }

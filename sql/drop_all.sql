@@ -1,17 +1,20 @@
 -- Удаление всех таблиц из базы данных
 -- ВНИМАНИЕ: Это удалит все данные!
-
--- Отключение проверки внешних ключей (для упрощения удаления)
-SET session_replication_role = 'replica';
+-- Использует CASCADE для автоматического удаления зависимостей
 
 -- Удаление всех таблиц в правильном порядке (с учетом зависимостей)
+-- CASCADE автоматически удалит все зависимости (foreign keys, constraints)
 DROP TABLE IF EXISTS sessions CASCADE;
 DROP TABLE IF EXISTS ratings CASCADE;
+DROP TABLE IF EXISTS integrator_services CASCADE;
+DROP TABLE IF EXISTS integrator_products CASCADE;
+DROP TABLE IF EXISTS certificates CASCADE;
+DROP TABLE IF EXISTS licenses CASCADE;
 DROP TABLE IF EXISTS integrators CASCADE;
+DROP TABLE IF EXISTS services CASCADE;
+DROP TABLE IF EXISTS products CASCADE;
+DROP TABLE IF EXISTS countries CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
-
--- Включение проверки внешних ключей обратно
-SET session_replication_role = 'origin';
 
 -- Альтернативный способ: удалить все таблицы через цикл
 -- DO $$
