@@ -153,6 +153,8 @@ std::string generateLoginPage(const std::string& error = "") {
          << "button:hover { background: #5568d3; }"
          << ".error { color: red; text-align: center; margin-bottom: 10px; font-size: 14px; }"
          << ".info { color: #666; text-align: center; margin-top: 20px; font-size: 12px; }"
+         << ".register-link { color: #667eea; text-decoration: none; display: block; text-align: center; margin-top: 15px; font-size: 14px; }"
+         << ".register-link:hover { text-decoration: underline; }"
          << "</style>"
          << "<script>"
          << "window.onload = function() {"
@@ -162,15 +164,70 @@ std::string generateLoginPage(const std::string& error = "") {
          << "</head><body><div class='login-box'><h2>🔐 Вход в систему</h2>";
     
     if (!error.empty()) {
-        html << "<div class='error'>" << error << "</div>";
+        html << "<div class='error'>" << htmlEscape(error) << "</div>";
     }
     
     html << "<form method='POST' action='/login'>"
          << "<input type='text' name='username' placeholder='Имя пользователя' required>"
          << "<input type='password' name='password' placeholder='Пароль' required>"
          << "<button type='submit'>Войти</button></form>"
-         << "<div class='info'>Если у вас нет аккаунта, он будет создан автоматически<br><br>"
-         << "Для админа: <b>admin</b> / <b>admin123</b></div>"
+         << "<a href='/register' class='register-link'>Нет аккаунта? Зарегистрироваться</a>"
+         << "<div class='info'><br>Для админа: <b>admin</b> / <b>admin123</b></div>"
+         << "</div></body></html>";
+    
+    return html.str();
+}
+
+std::string generateRegisterPage(const std::string& error = "", const std::string& username = "", const std::string& password = "") {
+    std::ostringstream html;
+    html << "<!DOCTYPE html><html lang='ru'><head>"
+         << "<meta charset='UTF-8'><title>Регистрация</title><style>"
+         << "body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }"
+         << ".register-box { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 320px; }"
+         << "h2 { text-align: center; color: #333; margin-bottom: 30px; }"
+         << "input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }"
+         << "button { width: 100%; padding: 12px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; }"
+         << "button:hover { background: #229954; }"
+         << ".error { color: red; text-align: center; margin-bottom: 10px; font-size: 14px; }"
+         << ".info { color: #666; text-align: center; margin-top: 15px; font-size: 12px; }"
+         << ".login-link { color: #667eea; text-decoration: none; display: block; text-align: center; margin-top: 15px; font-size: 14px; }"
+         << ".login-link:hover { text-decoration: underline; }"
+         << ".password-hint { font-size: 11px; color: #999; margin-top: -5px; margin-bottom: 10px; }"
+         << "</style>"
+         << "<script>"
+         << "function validatePassword() {"
+         << "  var pwd = document.getElementById('password').value;"
+         << "  var confirmPwd = document.getElementById('password_confirm').value;"
+         << "  var submitBtn = document.getElementById('submit-btn');"
+         << "  if (pwd.length < 3) {"
+         << "    submitBtn.disabled = true;"
+         << "    return false;"
+         << "  }"
+         << "  if (pwd !== confirmPwd) {"
+         << "    submitBtn.disabled = true;"
+         << "    return false;"
+         << "  }"
+         << "  submitBtn.disabled = false;"
+         << "  return true;"
+         << "}"
+         << "</script>"
+         << "</head><body><div class='register-box'><h2>📝 Регистрация</h2>";
+    
+    if (!error.empty()) {
+        html << "<div class='error'>" << htmlEscape(error) << "</div>";
+    }
+    
+    std::string safeUsername = htmlEscape(username);
+    std::string safePassword = htmlEscape(password);
+    
+    html << "<form method='POST' action='/register'>"
+         << "<input type='text' name='username' id='username' placeholder='Имя пользователя' value='" << safeUsername << "' required minlength='3' maxlength='50'>"
+         << "<input type='password' name='password' id='password' placeholder='Пароль (минимум 3 символа)' value='" << safePassword << "' required minlength='3' oninput='validatePassword()'>"
+         << "<div class='password-hint'>Минимум 3 символа</div>"
+         << "<input type='password' name='password_confirm' id='password_confirm' placeholder='Подтвердите пароль' required oninput='validatePassword()'>"
+         << "<button type='submit' id='submit-btn'>Зарегистрироваться</button></form>"
+         << "<a href='/login' class='login-link'>Уже есть аккаунт? Войти</a>"
+         << "<div class='info'><br>После регистрации вы сможете оценивать интеграторов и оставлять отзывы</div>"
          << "</div></body></html>";
     
     return html.str();
@@ -586,17 +643,16 @@ int main() {
                 User* user = db.getUserByUsername(username);
                 
                 if (!user) {
-                    std::cout << "Пользователь не найден, создаём нового" << std::endl;
-                    bool isAdmin = (username == "admin");
-                    if (db.createUser(username, password, isAdmin)) {
-                        user = db.getUserByUsername(username);
-                        std::cout << "Пользователь создан, isAdmin: " << (user ? user->isAdmin : false) << std::endl;
-                    }
-                } else {
-                    std::cout << "Пользователь найден, isAdmin: " << user->isAdmin << std::endl;
+                    std::cout << "Пользователь не найден" << std::endl;
+                    response = createHTTPResponse(generateLoginPage("Пользователь не найден. Зарегистрируйтесь, пожалуйста."));
+                    send(clientSocket, response.c_str(), response.length(), 0);
+                    close(clientSocket);
+                    continue;
                 }
                 
-                if (user && user->passwordHash == password) {
+                std::cout << "Пользователь найден, isAdmin: " << user->isAdmin << std::endl;
+                
+                if (user->passwordHash == password) {
                     // Генерируем уникальный токен для этой вкладки
                     std::string tabToken = generateSessionId();
                     
@@ -635,6 +691,70 @@ int main() {
                 }
                 
                 delete user;
+            }
+        } else if (request.find("GET /register") == 0) {
+            response = createHTTPResponse(generateRegisterPage());
+        } else if (request.find("POST /register") == 0) {
+            size_t bodyStart = request.find("\r\n\r\n");
+            if (bodyStart != std::string::npos) {
+                std::string body = request.substr(bodyStart + 4);
+                auto params = parsePostData(body);
+                
+                std::string username = params["username"];
+                std::string password = params["password"];
+                std::string passwordConfirm = params["password_confirm"];
+                
+                // Валидация
+                if (username.empty() || username.length() < 3) {
+                    response = createHTTPResponse(generateRegisterPage("Имя пользователя должно содержать минимум 3 символа", username, ""));
+                } else if (password.empty() || password.length() < 3) {
+                    response = createHTTPResponse(generateRegisterPage("Пароль должен содержать минимум 3 символа", username, ""));
+                } else if (password != passwordConfirm) {
+                    response = createHTTPResponse(generateRegisterPage("Пароли не совпадают", username, ""));
+                } else {
+                    // Проверка, существует ли пользователь
+                    User* existingUser = db.getUserByUsername(username);
+                    if (existingUser) {
+                        delete existingUser;
+                        response = createHTTPResponse(generateRegisterPage("Пользователь с таким именем уже существует", username, ""));
+                    } else {
+                        // Создание пользователя (admin только если имя "admin")
+                        bool isAdmin = (username == "admin");
+                        if (db.createUser(username, password, isAdmin)) {
+                            // Автоматический вход после регистрации
+                            User* newUser = db.getUserByUsername(username);
+                            if (newUser) {
+                                std::string tabToken = generateSessionId();
+                                std::string newSessionId = generateSessionId();
+                                db.createSession(newSessionId, newUser->id);
+                                
+                                std::string redirectPage = "<!DOCTYPE html><html><head><meta charset='UTF-8'><script>"
+                                    "sessionStorage.setItem('authenticated', 'true');"
+                                    "sessionStorage.setItem('tab_token', '" + tabToken + "');"
+                                    "window.location.href = '/?tab_token=" + tabToken + "';"
+                                    "</script></head><body>Регистрация успешна! Перенаправление...</body></html>";
+                                
+                                std::ostringstream resp;
+                                resp << "HTTP/1.1 200 OK\r\n"
+                                     << "Content-Type: text/html; charset=utf-8\r\n"
+                                     << "Set-Cookie: session_id=" << newSessionId << "; Path=/; HttpOnly\r\n"
+                                     << "Set-Cookie: tab_token=" << tabToken << "; Path=/\r\n"
+                                     << "Content-Length: " << redirectPage.length() << "\r\n"
+                                     << "Connection: close\r\n\r\n"
+                                     << redirectPage;
+                                response = resp.str();
+                                
+                                delete newUser;
+                            } else {
+                                response = createHTTPResponse(generateRegisterPage("Ошибка при создании пользователя", username, ""));
+                            }
+                        } else {
+                            response = createHTTPResponse(generateRegisterPage("Ошибка при создании пользователя", username, ""));
+                        }
+                    }
+                }
+            } else {
+                response = createHTTPResponse(generateRegisterPage("Ошибка: некорректные данные"));
             }
         } else if (request.find("POST /logout") == 0) {
             if (!sessionId.empty()) {

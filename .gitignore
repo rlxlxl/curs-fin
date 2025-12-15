@@ -20,3 +20,17 @@ server
 .DS_Store
 Thumbs.db
 
+# Прочее
+*.docx
+*.docx
+*.pdf
+*.txt
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.ico
+*.webp
+*.svg
