@@ -27,6 +27,21 @@ struct Session {
     bool isAdmin;
 };
 
+struct Rating {
+    int id;
+    int integratorId;
+    int userId;
+    int value;
+    std::string comment;
+    std::string username;
+    std::string createdAt;
+};
+
+struct RatingStats {
+    double average = 0.0;
+    int count = 0;
+};
+
 class Database {
 private:
     PGconn* conn;
@@ -64,6 +79,11 @@ public:
     Session* getSession(const std::string& sessionId);
     bool deleteSession(const std::string& sessionId);
     bool deleteUserSessions(int userId);
+
+    // Методы для рейтингов и отзывов
+    bool addOrUpdateRating(int integratorId, int userId, int ratingValue, const std::string& comment);
+    std::vector<Rating> getRatingsByIntegrator(int integratorId);
+    std::map<int, RatingStats> getRatingStats();
 };
 
 #endif

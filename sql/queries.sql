@@ -82,6 +82,29 @@ DELETE FROM sessions WHERE session_id = $1;
 -- QUERY: DELETE_USER_SESSIONS
 DELETE FROM sessions WHERE user_id = $1;
 
+-- Добавление/обновление рейтинга (upsert)
+-- QUERY: UPSERT_RATING
+INSERT INTO ratings (integrator_id, user_id, rating, comment)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (integrator_id, user_id) DO UPDATE
+SET rating = EXCLUDED.rating,
+    comment = EXCLUDED.comment,
+    created_at = CURRENT_TIMESTAMP;
+
+-- Получение рейтингов по интегратору
+-- QUERY: GET_RATINGS_BY_INTEGRATOR
+SELECT r.id, r.integrator_id, r.user_id, r.rating, r.comment, r.created_at, u.username
+FROM ratings r
+JOIN users u ON r.user_id = u.id
+WHERE r.integrator_id = $1
+ORDER BY r.created_at DESC;
+
+-- Получение агрегированной статистики рейтингов по всем интеграторам
+-- QUERY: GET_RATING_STATS
+SELECT integrator_id, AVG(rating) AS avg_rating, COUNT(*) AS rating_count
+FROM ratings
+GROUP BY integrator_id;
+
 -- Создание администратора по умолчанию (пароль: admin123)
 INSERT INTO users (username, password_hash, is_admin) 
 VALUES ('admin', 'admin123', TRUE) 

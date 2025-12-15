@@ -27,6 +27,17 @@ CREATE TABLE IF NOT EXISTS sessions (
     expires_at TIMESTAMP NOT NULL
 );
 
+-- Создание таблицы рейтингов и отзывов
+CREATE TABLE IF NOT EXISTS ratings (
+    id SERIAL PRIMARY KEY,
+    integrator_id INTEGER REFERENCES integrators(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (integrator_id, user_id)
+);
+
 -- Создание администратора по умолчанию (пароль: admin123)
 INSERT INTO users (username, password_hash, is_admin) 
 VALUES ('admin', 'admin123', TRUE) 

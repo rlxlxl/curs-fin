@@ -8,6 +8,9 @@
 #include <netinet/in.h>
 #include <map>
 #include <random>
+#include <algorithm>
+#include <cctype>
+#include <iomanip>
 
 std::string generateSessionId() {
     static std::random_device rd;
@@ -39,6 +42,21 @@ std::string urlDecode(const std::string& str) {
     return result;
 }
 
+std::string urlEncode(const std::string& value) {
+    std::ostringstream escaped;
+    escaped << std::hex << std::uppercase;
+    for (unsigned char c : value) {
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            escaped << c;
+        } else if (c == ' ') {
+            escaped << '+';
+        } else {
+            escaped << '%' << std::setw(2) << int(c) << std::setw(0);
+        }
+    }
+    return escaped.str();
+}
+
 std::string htmlEscape(const std::string& str) {
     std::string result;
     for (char c : str) {
@@ -57,6 +75,19 @@ std::string htmlEscape(const std::string& str) {
         }
     }
     return result;
+}
+
+std::string toLowerStr(const std::string& str) {
+    std::string res = str;
+    std::transform(res.begin(), res.end(), res.begin(), [](unsigned char c){ return std::tolower(c); });
+    return res;
+}
+
+bool containsCaseInsensitive(const std::string& text, const std::string& pattern) {
+    if (pattern.empty()) return true;
+    std::string lowerText = toLowerStr(text);
+    std::string lowerPattern = toLowerStr(pattern);
+    return lowerText.find(lowerPattern) != std::string::npos;
 }
 
 std::map<std::string, std::string> parsePostData(const std::string& data) {
@@ -145,7 +176,23 @@ std::string generateLoginPage(const std::string& error = "") {
     return html.str();
 }
 
-std::string generateMainPage(const std::vector<Integrator>& integrators, bool isAdmin, const std::string& username, const std::string& tabToken, const std::vector<std::string>& cities, const std::string& selectedCity = "") {
+std::string generateMainPage(
+    const std::vector<Integrator>& integrators,
+    bool isAdmin,
+    bool isLoggedIn,
+    const std::string& username,
+    const std::string& tabToken,
+    const std::vector<std::string>& cities,
+    const std::string& cityQuery = "",
+    const std::string& filterCityParam = "",
+    const std::string& searchName = "",
+    const std::string& sortOption = "name_asc",
+    int page = 1,
+    int totalPages = 1,
+    int totalCount = 0,
+    const std::map<int, RatingStats>& ratingStats = {},
+    const std::map<int, std::vector<Rating>>& integratorRatings = {}
+) {
     std::ostringstream html;
     html << "<!DOCTYPE html><html lang='ru'><head>"
          << "<meta charset='UTF-8'><title>Интеграторы InfoSec</title><style>"
@@ -179,13 +226,25 @@ std::string generateMainPage(const std::vector<Integrator>& integrators, bool is
          << ".search-box { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }"
          << ".search-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }"
          << ".search-form input, .search-form select { padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }"
-         << ".search-form input[type='text'] { flex: 1; min-width: 200px; }"
+         << ".search-form input[type='text'] { flex: 1; min-width: 160px; }"
          << ".search-form select { min-width: 150px; }"
          << ".search-btn { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; }"
          << ".search-btn:hover { background: #2980b9; }"
          << ".clear-btn { background: #95a5a6; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; }"
          << ".clear-btn:hover { background: #7f8c8d; }"
          << ".results-info { color: #7f8c8d; font-size: 14px; margin-bottom: 15px; }"
+         << ".rating { margin-top: 8px; font-size: 14px; color: #555; }"
+         << ".rating strong { color: #e67e22; }"
+         << ".reviews { margin-top: 10px; background: #fafafa; padding: 10px; border: 1px solid #eee; border-radius: 6px; }"
+         << ".review { margin-bottom: 8px; font-size: 13px; }"
+         << ".pagination { margin-top: 15px; display: flex; gap: 8px; align-items: center; }"
+         << ".pagination a, .pagination span { padding: 8px 12px; border-radius: 5px; border: 1px solid #ddd; text-decoration: none; color: #333; }"
+         << ".pagination a:hover { background: #f0f0f0; }"
+         << ".pagination .active { background: #3498db; color: white; border-color: #3498db; }"
+         << ".rate-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }"
+         << ".rate-form select, .rate-form textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }"
+         << ".rate-form button { align-self: flex-start; background: #3498db; color: white; border: none; padding: 8px 14px; border-radius: 5px; cursor: pointer; font-size: 14px; }"
+         << ".rate-form button:hover { background: #2980b9; }"
          << "</style>"
          << "<script>"
          << "window.onload = function() {"
@@ -211,9 +270,12 @@ std::string generateMainPage(const std::vector<Integrator>& integrators, bool is
          << "<button type='submit' class='logout-btn'>Выйти</button></form></div></div>";
     
     // Форма поиска и фильтрации
-    std::string escapedCity = htmlEscape(selectedCity);
+    std::string escapedCity = htmlEscape(cityQuery);
+    std::string escapedFilterCity = htmlEscape(filterCityParam);
+    std::string escapedSearch = htmlEscape(searchName);
     html << "<div class='search-box'>"
          << "<form method='GET' action='/' class='search-form'>"
+         << "<input type='text' name='name' placeholder='Поиск по названию...' value='" << escapedSearch << "'>"
          << "<input type='text' name='city' placeholder='Поиск по городу...' value='" << escapedCity << "'>"
          << "<select name='filter_city'>"
          << "<option value=''>Все города</option>";
@@ -221,20 +283,28 @@ std::string generateMainPage(const std::vector<Integrator>& integrators, bool is
     for (const auto& city : cities) {
         std::string escapedCityName = htmlEscape(city);
         html << "<option value='" << escapedCityName << "'";
-        if (city == selectedCity) {
+        if (city == filterCityParam) {
             html << " selected";
         }
         html << ">" << escapedCityName << "</option>";
     }
     
     html << "</select>"
+         << "<select name='sort'>"
+         << "<option value='name_asc'" << (sortOption == "name_asc" ? " selected" : "") << ">Название ↑</option>"
+         << "<option value='name_desc'" << (sortOption == "name_desc" ? " selected" : "") << ">Название ↓</option>"
+         << "<option value='city_asc'" << (sortOption == "city_asc" ? " selected" : "") << ">Город ↑</option>"
+         << "<option value='city_desc'" << (sortOption == "city_desc" ? " selected" : "") << ">Город ↓</option>"
+         << "<option value='rating_desc'" << (sortOption == "rating_desc" ? " selected" : "") << ">Рейтинг ↓</option>"
+         << "<option value='rating_asc'" << (sortOption == "rating_asc" ? " selected" : "") << ">Рейтинг ↑</option>"
+         << "</select>"
          << "<button type='submit' class='search-btn'>🔍 Поиск</button>"
          << "<a href='/' style='text-decoration: none;'><button type='button' class='clear-btn'>Очистить</button></a>"
          << "</form>";
     
-    if (!selectedCity.empty()) {
-        html << "<div class='results-info'>Найдено интеграторов: " << integrators.size() << "</div>";
-    }
+    int shownCount = static_cast<int>(integrators.size());
+    int totalShown = totalCount > 0 ? totalCount : shownCount;
+    html << "<div class='results-info'>Найдено интеграторов: " << totalShown << "</div>";
     
     html << "</div>";
     
@@ -283,7 +353,79 @@ std::string generateMainPage(const std::vector<Integrator>& integrators, bool is
         html << "<h2>" << integrator.name << "</h2>"
              << "<div class='city'><span class='badge'>Город</span>" << integrator.city << "</div>"
              << "<div class='description'>" << integrator.description << "</div>"
-             << "</div>";
+             << "<div class='rating'>";
+
+        auto statIt = ratingStats.find(integrator.id);
+        if (statIt != ratingStats.end() && statIt->second.count > 0) {
+            html << "Рейтинг: <strong>" << std::fixed << std::setprecision(1) << statIt->second.average << "</strong> / 5"
+                 << " (" << statIt->second.count << ")";
+            html << std::defaultfloat;
+        } else {
+            html << "Рейтинг: нет оценок";
+        }
+        html << "</div>";
+
+        auto ratingsIt = integratorRatings.find(integrator.id);
+        if (ratingsIt != integratorRatings.end() && !ratingsIt->second.empty()) {
+            html << "<div class='reviews'>";
+            int shown = 0;
+            for (const auto& r : ratingsIt->second) {
+                if (shown >= 3) break;
+                html << "<div class='review'>"
+                     << "<strong>" << htmlEscape(r.username) << "</strong> — " << r.value << "/5"
+                     << " <span style='color:#999;font-size:12px;'>" << r.createdAt << "</span><br>"
+                     << htmlEscape(r.comment)
+                     << "</div>";
+                shown++;
+            }
+            html << "</div>";
+        }
+
+        if (isLoggedIn) {
+            html << "<div class='rate-form'>"
+                 << "<form method='POST' action='/rate'>"
+                 << "<input type='hidden' name='id' value='" << integrator.id << "'>"
+                 << "<label>Оцените интегратора:</label>"
+                 << "<select name='rating'>"
+                 << "<option value='5'>5</option>"
+                 << "<option value='4'>4</option>"
+                 << "<option value='3'>3</option>"
+                 << "<option value='2'>2</option>"
+                 << "<option value='1'>1</option>"
+                 << "</select>"
+                 << "<textarea name='comment' placeholder='Комментарий (необязательно)'></textarea>"
+                 << "<button type='submit'>Сохранить оценку</button>"
+                 << "</form>"
+                 << "</div>";
+        }
+
+        html << "</div>";
+    }
+
+    // Пагинация
+    if (totalPages > 1) {
+        html << "<div class='pagination'>";
+        auto makeLink = [&](int targetPage, const std::string& text, bool active) {
+            std::ostringstream link;
+            link << "/?page=" << targetPage
+                 << "&name=" << urlEncode(searchName)
+                 << "&city=" << urlEncode(cityQuery)
+                 << "&filter_city=" << urlEncode(filterCityParam)
+                 << "&sort=" << urlEncode(sortOption);
+            if (active) {
+                html << "<span class='active'>" << text << "</span>";
+            } else {
+                html << "<a href='" << link.str() << "'>" << text << "</a>";
+            }
+        };
+        if (page > 1) {
+            makeLink(page - 1, "« Назад", false);
+        }
+        makeLink(page, "Страница " + std::to_string(page) + " / " + std::to_string(totalPages), true);
+        if (page < totalPages) {
+            makeLink(page + 1, "Вперёд »", false);
+        }
+        html << "</div>";
     }
     
     if (isAdmin) {
@@ -523,34 +665,95 @@ int main() {
                 db.deleteIntegrator(std::stoi(params["id"]));
             }
             response = createRedirectResponse("/");
+        } else if (request.find("POST /rate") == 0 && session) {
+            size_t bodyStart = request.find("\r\n\r\n");
+            if (bodyStart != std::string::npos) {
+                std::string body = request.substr(bodyStart + 4);
+                auto params = parsePostData(body);
+                int integratorId = std::stoi(params["id"]);
+                int ratingVal = std::stoi(params["rating"]);
+                ratingVal = std::max(1, std::min(5, ratingVal));
+                std::string comment = params["comment"];
+                db.addOrUpdateRating(integratorId, session->userId, ratingVal, comment);
+            }
+            response = createRedirectResponse("/");
         } else if (request.find("GET / ") == 0 || request.find("GET /?") == 0) {
             if (session) {
                 std::string tabToken = getCookie(request, "tab_token");
                 std::cout << "Пользователь: " << session->username << ", Admin: " << (session->isAdmin ? "Да" : "Нет") << ", Tab token: " << tabToken << std::endl;
                 
-                // Получаем параметры фильтрации
+                // Получаем параметры фильтрации и сортировки
                 std::string cityParam = getQueryParam(request, "city");
                 std::string filterCity = getQueryParam(request, "filter_city");
-                
-                std::string selectedCity;
-                std::vector<Integrator> integrators;
-                
-                // Определяем, какой фильтр использовать
-                if (!filterCity.empty()) {
-                    // Точное совпадение по городу из выпадающего списка
-                    selectedCity = filterCity;
-                    integrators = db.getIntegratorsByCity(filterCity);
-                } else if (!cityParam.empty()) {
-                    // Поиск по частичному совпадению
-                    selectedCity = cityParam;
-                    integrators = db.searchIntegratorsByCity(cityParam);
-                } else {
-                    // Показать все
-                    integrators = db.getAllIntegrators();
+                std::string searchName = getQueryParam(request, "name");
+                std::string sortOption = getQueryParam(request, "sort");
+                if (sortOption.empty()) sortOption = "name_asc";
+                if (sortOption != "name_asc" && sortOption != "name_desc" &&
+                    sortOption != "city_asc" && sortOption != "city_desc" &&
+                    sortOption != "rating_desc" && sortOption != "rating_asc") {
+                    sortOption = "name_asc";
                 }
-                
+
+                int page = 1;
+                std::string pageParam = getQueryParam(request, "page");
+                if (!pageParam.empty()) {
+                    try { page = std::max(1, std::stoi(pageParam)); } catch (...) { page = 1; }
+                }
+                const int pageSize = 5;
+
+                // Получаем данные
+                std::vector<Integrator> integrators = db.getAllIntegrators();
+
+                // Фильтрация по городу и названию
+                std::vector<Integrator> filtered;
+                for (const auto& itg : integrators) {
+                    if (!filterCity.empty() && itg.city != filterCity) continue;
+                    if (!cityParam.empty() && !containsCaseInsensitive(itg.city, cityParam)) continue;
+                    if (!searchName.empty() && !containsCaseInsensitive(itg.name, searchName)) continue;
+                    filtered.push_back(itg);
+                }
+
+                // Статистика рейтингов для сортировки и отображения
+                std::map<int, RatingStats> ratingStats = db.getRatingStats();
+
+                // Сортировка
+                std::sort(filtered.begin(), filtered.end(), [&](const Integrator& a, const Integrator& b) {
+                    if (sortOption == "name_desc") return a.name > b.name;
+                    if (sortOption == "city_asc") return a.city < b.city;
+                    if (sortOption == "city_desc") return a.city > b.city;
+                    if (sortOption == "rating_desc") {
+                        double ra = ratingStats.count(a.id) ? ratingStats[a.id].average : 0.0;
+                        double rb = ratingStats.count(b.id) ? ratingStats[b.id].average : 0.0;
+                        if (ra == rb) return a.name < b.name;
+                        return ra > rb;
+                    }
+                    if (sortOption == "rating_asc") {
+                        double ra = ratingStats.count(a.id) ? ratingStats[a.id].average : 0.0;
+                        double rb = ratingStats.count(b.id) ? ratingStats[b.id].average : 0.0;
+                        if (ra == rb) return a.name < b.name;
+                        return ra < rb;
+                    }
+                    // default name_asc
+                    return a.name < b.name;
+                });
+
+                // Пагинация
+                int total = static_cast<int>(filtered.size());
+                int totalPages = std::max(1, (total + pageSize - 1) / pageSize);
+                if (page > totalPages) page = totalPages;
+                int start = (page - 1) * pageSize;
+                int end = std::min(start + pageSize, total);
+                std::vector<Integrator> pageItems;
+                for (int i = start; i < end; i++) pageItems.push_back(filtered[i]);
+
+                // Рейтинги для текущей страницы
+                std::map<int, std::vector<Rating>> integratorRatings;
+                for (const auto& itg : pageItems) {
+                    integratorRatings[itg.id] = db.getRatingsByIntegrator(itg.id);
+                }
+
                 std::vector<std::string> cities = db.getAllCities();
-                response = createHTTPResponse(generateMainPage(integrators, session->isAdmin, session->username, tabToken, cities, selectedCity));
+                response = createHTTPResponse(generateMainPage(pageItems, session->isAdmin, true, session->username, tabToken, cities, cityParam, filterCity, searchName, sortOption, page, totalPages, total, ratingStats, integratorRatings));
             } else {
                 response = createHTTPResponse(generateLoginPage());
             }

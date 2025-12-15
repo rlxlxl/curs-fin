@@ -539,3 +539,100 @@ bool Database::deleteUserSessions(int userId) {
     PQclear(res);
     return true;
 }
+
+bool Database::addOrUpdateRating(int integratorId, int userId, int ratingValue, const std::string& comment) {
+    if (queries.find("UPSERT_RATING") == queries.end()) {
+        std::cerr << "Ошибка: запрос UPSERT_RATING не найден" << std::endl;
+        return false;
+    }
+
+    const char* query = queries["UPSERT_RATING"].c_str();
+
+    std::string integratorIdStr = std::to_string(integratorId);
+    std::string userIdStr = std::to_string(userId);
+    std::string ratingStr = std::to_string(ratingValue);
+
+    const char* paramValues[4] = {
+        integratorIdStr.c_str(),
+        userIdStr.c_str(),
+        ratingStr.c_str(),
+        comment.c_str()
+    };
+
+    PGresult* res = PQexecParams(conn, query, 4, nullptr, paramValues, nullptr, nullptr, 0);
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        std::cerr << "Ошибка сохранения рейтинга: " << PQerrorMessage(conn) << std::endl;
+        PQclear(res);
+        return false;
+    }
+
+    PQclear(res);
+    return true;
+}
+
+std::vector<Rating> Database::getRatingsByIntegrator(int integratorId) {
+    std::vector<Rating> ratings;
+
+    if (queries.find("GET_RATINGS_BY_INTEGRATOR") == queries.end()) {
+        std::cerr << "Ошибка: запрос GET_RATINGS_BY_INTEGRATOR не найден" << std::endl;
+        return ratings;
+    }
+
+    const char* query = queries["GET_RATINGS_BY_INTEGRATOR"].c_str();
+    std::string integratorIdStr = std::to_string(integratorId);
+    const char* paramValues[1] = { integratorIdStr.c_str() };
+
+    PGresult* res = PQexecParams(conn, query, 1, nullptr, paramValues, nullptr, nullptr, 0);
+
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        std::cerr << "Ошибка запроса рейтингов: " << PQerrorMessage(conn) << std::endl;
+        PQclear(res);
+        return ratings;
+    }
+
+    int rows = PQntuples(res);
+    for (int i = 0; i < rows; i++) {
+        Rating r;
+        r.id = std::stoi(PQgetvalue(res, i, 0));
+        r.integratorId = std::stoi(PQgetvalue(res, i, 1));
+        r.userId = std::stoi(PQgetvalue(res, i, 2));
+        r.value = std::stoi(PQgetvalue(res, i, 3));
+        r.comment = PQgetvalue(res, i, 4);
+        r.createdAt = PQgetvalue(res, i, 5);
+        r.username = PQgetvalue(res, i, 6);
+        ratings.push_back(r);
+    }
+
+    PQclear(res);
+    return ratings;
+}
+
+std::map<int, RatingStats> Database::getRatingStats() {
+    std::map<int, RatingStats> stats;
+
+    if (queries.find("GET_RATING_STATS") == queries.end()) {
+        std::cerr << "Ошибка: запрос GET_RATING_STATS не найден" << std::endl;
+        return stats;
+    }
+
+    const char* query = queries["GET_RATING_STATS"].c_str();
+    PGresult* res = PQexec(conn, query);
+
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        std::cerr << "Ошибка запроса статистики рейтингов: " << PQerrorMessage(conn) << std::endl;
+        PQclear(res);
+        return stats;
+    }
+
+    int rows = PQntuples(res);
+    for (int i = 0; i < rows; i++) {
+        int integratorId = std::stoi(PQgetvalue(res, i, 0));
+        double avg = std::stod(PQgetvalue(res, i, 1));
+        int count = std::stoi(PQgetvalue(res, i, 2));
+        stats[integratorId] = RatingStats{avg, count};
+    }
+
+    PQclear(res);
+    return stats;
+}
