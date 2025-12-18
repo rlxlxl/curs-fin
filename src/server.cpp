@@ -172,7 +172,6 @@ std::string generateLoginPage(const std::string& error = "") {
          << "<input type='password' name='password' placeholder='Пароль' required>"
          << "<button type='submit'>Войти</button></form>"
          << "<a href='/register' class='register-link'>Нет аккаунта? Зарегистрироваться</a>"
-         << "<div class='info'><br>Для админа: <b>парол</b> / <b>не кажу123</b></div>"
          << "</div></body></html>";
     
     return html.str();
